@@ -58,7 +58,8 @@ jobs:
           tar -czf "mtproxygo-linux-${{ matrix.arch }}.tar.gz" \
             mtproxygo \
             mtproxygo.service \
-            mtproxygo_openrc
+            mtproxygo_openrc \
+            config.ini
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
