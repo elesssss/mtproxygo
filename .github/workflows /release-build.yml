@@ -20,36 +20,20 @@ jobs:
     strategy:
       matrix:
         include:
-          - arch: amd64
-            goarch: amd64
-            goarm: ''
-          - arch: arm64
-            goarch: arm64
-            goarm: ''
-          - arch: armv7
-            goarch: arm
-            goarm: '7'
-          - arch: armv6
-            goarch: arm
-            goarm: '6'
-          - arch: armv5
-            goarch: arm
-            goarm: '5'
-          - arch: 386
-            goarch: '386'
-            goarm: ''
-          - arch: s390x
-            goarch: s390x
-            goarm: ''
+          - { arch: amd64,  goarch: amd64, goarm: '' }
+          - { arch: arm64,  goarch: arm64, goarm: '' }
+          - { arch: armv7,  goarch: arm,   goarm: '7' }
+          - { arch: armv6,  goarch: arm,   goarm: '6' }
+          - { arch: armv5,  goarch: arm,   goarm: '5' }
+          - { arch: 386,    goarch: 386,   goarm: '' }
+          - { arch: s390x,  goarch: s390x, goarm: '' }
 
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
         with:
           fetch-depth: 0
 
-      - name: Set up Go
-        uses: actions/setup-go@v5
+      - uses: actions/setup-go@v5
         with:
           go-version: '1.21'
 
@@ -68,52 +52,32 @@ jobs:
           GOARM: ${{ matrix.goarm }}
           CGO_ENABLED: 0
         run: |
-          REPO_NAME="${{ github.event.repository.name }}"
-          ARCHIVE="${REPO_NAME}-linux-${{ matrix.arch }}.tar.gz"
+          REPO="${{ github.event.repository.name }}"
+          go build -trimpath -ldflags="-s -w -buildid=" -o "${REPO}" .
+          tar -czf "${REPO}-linux-${{ matrix.arch }}.tar.gz" "${REPO}" mtproxygo.service mtproxygo_openrc
+          echo "ARCHIVE=${REPO}-linux-${{ matrix.arch }}.tar.gz" >> $GITHUB_ENV
 
-          go build \
-            -trimpath \
-            -ldflags="-s -w -buildid=" \
-            -o "${REPO_NAME}" .
-
-          tar -czf "${ARCHIVE}" \
-            "${REPO_NAME}" \
-            mtproxygo.service \
-            mtproxygo_openrc
-
-          echo "ARCHIVE=${ARCHIVE}" >> $GITHUB_ENV
-
-      - name: Upload artifact
-        uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v4
         with:
           name: build-linux-${{ matrix.arch }}
           path: ${{ env.ARCHIVE }}
           retention-days: 1
 
   release:
-    name: Create Release
     needs: build
     runs-on: ubuntu-latest
     steps:
-      - name: Download all artifacts
-        uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v4
         with:
           path: dist
           merge-multiple: true
 
-      - name: Generate checksums
-        run: |
-          cd dist
-          sha256sum *.tar.gz > SHA256SUMS.txt
-          cat SHA256SUMS.txt
+      - run: cd dist && sha256sum *.tar.gz > SHA256SUMS.txt
 
-      - name: Create Release
-        uses: softprops/action-gh-release@v2
+      - uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ needs.build.outputs.version }}
           name: Release ${{ needs.build.outputs.version }}
-          draft: false
-          prerelease: false
           generate_release_notes: true
           files: |
             dist/*.tar.gz
