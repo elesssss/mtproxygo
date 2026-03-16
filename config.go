@@ -250,9 +250,43 @@ func loadConfig(path string) (*Config, error) {
 	return cfg, nil
 }
 
-func parseArgs() string {
+func parseArgs() (configPath string) {
 	defaultConfig := filepath.Join(filepath.Dir(os.Args[0]), "config.ini")
-	configPath := flag.String("c", defaultConfig, "配置文件路径 (默认: <程序目录>/config.ini)")
+
+	var cfgPath string
+	var genSecret bool
+	var showHelp bool
+
+	flag.StringVar(&cfgPath, "c", defaultConfig, "")
+	flag.StringVar(&cfgPath, "config", defaultConfig, "")
+	flag.BoolVar(&genSecret, "s", false, "")
+	flag.BoolVar(&genSecret, "secret", false, "")
+	flag.BoolVar(&showHelp, "h", false, "")
+	flag.BoolVar(&showHelp, "help", false, "")
+
+	flag.Usage = func() {
+		fmt.Fprintf(os.Stderr, "Usage: %s [options]\n\n", filepath.Base(os.Args[0]))
+		fmt.Fprintf(os.Stderr, "Options:\n")
+		fmt.Fprintf(os.Stderr, "  -s, --secret        生成随机 32 位 hex 密钥\n")
+		fmt.Fprintf(os.Stderr, "  -c, --config PATH   指定配置文件路径 (默认: <程序目录>/config.ini)\n")
+		fmt.Fprintf(os.Stderr, "  -h, --help          显示帮助信息\n")
+	}
+
 	flag.Parse()
-	return *configPath
+
+	if showHelp {
+		flag.Usage()
+		os.Exit(0)
+	}
+
+	if genSecret {
+		b := make([]byte, 16)
+		f, _ := os.Open("/dev/urandom")
+		f.Read(b)
+		f.Close()
+		fmt.Println(hex.EncodeToString(b))
+		os.Exit(0)
+	}
+
+	return cfgPath
 }
