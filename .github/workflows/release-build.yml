@@ -55,7 +55,7 @@ jobs:
             -ldflags "-s -w -buildid=" \
             -o mtpgo .
 
-          tar -czf "mtproxygo-linux-${{ matrix.arch }}.tar.gz" \
+          tar -czf "mtpgo-linux-${{ matrix.arch }}.tar.gz" \
             mtpgo \
             mtpgo.service \
             mtpgo_openrc \
@@ -65,7 +65,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: build-linux-${{ matrix.arch }}
-          path: mtproxygo-linux-${{ matrix.arch }}.tar.gz
+          path: mtpgo-linux-${{ matrix.arch }}.tar.gz
           retention-days: 1
 
   release:
