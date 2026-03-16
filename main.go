@@ -8,18 +8,38 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"path/filepath"
 	"strings"
 	"syscall"
 	"time"
 )
 
-// ── 获取公网 IP ───────────────────────────────────────────────────────────────
+// ── 日志 ──────────────────────────────────────────────────────────────────────
+
+var logWriter io.Writer = os.Stderr
+
+func setupLogger() {
+	logDir := filepath.Dir(os.Args[0])
+	logPath := filepath.Join(logDir, "log_mtpgo")
+	logFile, err := os.OpenFile(logPath, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0644)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "无法创建日志文件 %s: %v\n", logPath, err)
+		return
+	}
+	logWriter = io.MultiWriter(os.Stderr, logFile)
+}
+
+func logf(format string, args ...interface{}) {
+	fmt.Fprintf(logWriter, format, args...)
+}
 
 func dbgf(cfg *Config, format string, args ...interface{}) {
 	if cfg != nil && cfg.Debug {
-		fmt.Fprintf(os.Stderr, format, args...)
+		logf(format, args...)
 	}
 }
+
+// ── 获取公网 IP ───────────────────────────────────────────────────────────────
 
 func getIPFromURL(url string) string {
 	client := &http.Client{Timeout: 5 * time.Second}
@@ -53,10 +73,10 @@ func initIPInfo(cfg *Config) {
 	myIPInfo.Set(ipv4, ipv6)
 
 	if ipv6 != "" && (cfg.PreferIPv6 || ipv4 == "") {
-		fmt.Fprintln(os.Stderr, "IPv6 found, using it for external communication")
+		logf("IPv6 found, using it for external communication\n")
 	}
 	if cfg.UseMiddleProxy && ipv4 == "" && ipv6 == "" {
-		fmt.Fprintln(os.Stderr, "Failed to determine your ip, advertising disabled")
+		logf("Failed to determine your ip, advertising disabled\n")
 		disableMiddleProxy = true
 	}
 }
@@ -79,7 +99,7 @@ func printTGInfo(cfg *Config) []map[string]string {
 			ipAddrs = append(ipAddrs, ipv6)
 		}
 		if len(ipAddrs) == 0 {
-			fmt.Fprintln(os.Stderr, "Warning: could not determine public IP")
+			logf("Warning: could not determine public IP\n")
 			return nil
 		}
 	}
@@ -100,37 +120,37 @@ func printTGInfo(cfg *Config) []map[string]string {
 				link := fmt.Sprintf("https://t.me/proxy?server=%s&port=%d&secret=%s",
 					ip, cfg.Port, secretHex)
 				links = append(links, map[string]string{"secret": secretHex, "link": link})
-				fmt.Printf("\033[31mMtproxyurl: %s\033[0m\n", link)
+				logf("\033[31mMtproxyurl: %s\033[0m\n", link)
 			}
 			if cfg.Modes.Secure {
 				link := fmt.Sprintf("https://t.me/proxy?server=%s&port=%d&secret=dd%s",
 					ip, cfg.Port, secretHex)
 				links = append(links, map[string]string{"secret": secretHex, "link": link})
-				fmt.Printf("\033[31mMtproxyurl: %s\033[0m\n", link)
+				logf("\033[31mMtproxyurl: %s\033[0m\n", link)
 			}
 			if cfg.Modes.TLS {
 				tlsSecret := "ee" + secretHex + hex.EncodeToString([]byte(cfg.TLSDomain))
 				link := fmt.Sprintf("https://t.me/proxy?server=%s&port=%d&secret=%s",
 					ip, cfg.Port, tlsSecret)
 				links = append(links, map[string]string{"secret": secretHex, "link": link})
-				fmt.Printf("\033[31mMtproxyurl: %s\033[0m\n", link)
+				logf("\033[31mMtproxyurl: %s\033[0m\n", link)
 			}
 		}
 
 		if defaultSecrets[secretHex] {
-			fmt.Printf("The default secret %s is used, this is not recommended\n", secretHex)
+			logf("The default secret %s is used, this is not recommended\n", secretHex)
 			rnd := globalRand.Bytes(16)
-			fmt.Printf("You can change it to this random secret: %s\n", hex.EncodeToString(rnd))
+			logf("You can change it to this random secret: %s\n", hex.EncodeToString(rnd))
 			printDefault = true
 		}
 	}
 
 	if cfg.TLSDomain == "www.google.com" {
-		fmt.Println("The default TLS_DOMAIN www.google.com is used, this is not recommended")
+		logf("The default TLS_DOMAIN www.google.com is used, this is not recommended\n")
 		printDefault = true
 	}
 	if printDefault {
-		fmt.Fprintln(os.Stderr, "Warning: one or more default settings detected")
+		logf("Warning: one or more default settings detected\n")
 	}
 
 	return links
@@ -145,9 +165,9 @@ func startServers(cfg *Config) []io.Closer {
 		addr := fmt.Sprintf("%s:%d", cfg.ListenAddrIPv4, cfg.Port)
 		ln, err := net.Listen("tcp4", addr)
 		if err != nil {
-			fmt.Fprintf(os.Stderr, "Failed to listen on %s: %v\n", addr, err)
+			logf("Failed to listen on %s: %v\n", addr, err)
 		} else {
-			fmt.Fprintf(os.Stderr, "Listening on %s\n", addr)
+			logf("Listening on %s\n", addr)
 			listeners = append(listeners, ln)
 			go acceptLoop(ln, cfg)
 		}
@@ -157,9 +177,9 @@ func startServers(cfg *Config) []io.Closer {
 		addr := fmt.Sprintf("[%s]:%d", cfg.ListenAddrIPv6, cfg.Port)
 		ln, err := net.Listen("tcp6", addr)
 		if err != nil {
-			fmt.Fprintf(os.Stderr, "Failed to listen on %s: %v\n", addr, err)
+			logf("Failed to listen on %s: %v\n", addr, err)
 		} else {
-			fmt.Fprintf(os.Stderr, "Listening on %s\n", addr)
+			logf("Listening on %s\n", addr)
 			listeners = append(listeners, ln)
 			go acceptLoop(ln, cfg)
 		}
@@ -169,7 +189,7 @@ func startServers(cfg *Config) []io.Closer {
 		os.Remove(cfg.ListenUnixSock)
 		ln, err := net.Listen("unix", cfg.ListenUnixSock)
 		if err != nil {
-			fmt.Fprintf(os.Stderr, "Failed to listen on unix %s: %v\n", cfg.ListenUnixSock, err)
+			logf("Failed to listen on unix %s: %v\n", cfg.ListenUnixSock, err)
 		} else {
 			listeners = append(listeners, ln)
 			go acceptLoop(ln, cfg)
@@ -192,22 +212,21 @@ func acceptLoop(ln net.Listener, cfg *Config) {
 // ── main ──────────────────────────────────────────────────────────────────────
 
 func main() {
+	setupLogger()
 	configPath := parseArgs()
 
 	cfg, err := loadConfig(configPath)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "配置加载失败: %v\n", err)
+		logf("配置加载失败: %v\n", err)
 		os.Exit(1)
 	}
 
-	// 初始化全局状态
 	usedHandshakes = newReplayCache(cfg.ReplayCheckLen)
 	clientIPs = newReplayCache(cfg.ClientIPsLen)
 
 	initIPInfo(cfg)
 	currentProxyLinks = printTGInfo(cfg)
 
-	// 后台任务
 	go statsPrinter(cfg)
 	go getMaskHostCertLen(cfg)
 	go clearIPResolvingCache()
@@ -219,39 +238,35 @@ func main() {
 		}
 	}
 
-	// metrics server
 	startMetricsServer(cfg, currentProxyLinks)
 
-	// 启动代理服务器
 	listeners := startServers(cfg)
 	if len(listeners) == 0 {
-		fmt.Fprintln(os.Stderr, "没有可用的监听地址，退出")
+		logf("没有可用的监听地址，退出\n")
 		os.Exit(1)
 	}
 
-	// SIGUSR2 热重载
 	reloadCh := make(chan os.Signal, 1)
 	signal.Notify(reloadCh, syscall.SIGUSR2)
 	go func() {
 		for range reloadCh {
 			newCfg, err := loadConfig(configPath)
 			if err != nil {
-				fmt.Fprintf(os.Stderr, "配置重载失败: %v\n", err)
+				logf("配置重载失败: %v\n", err)
 				continue
 			}
 			*cfg = *newCfg
 			usedHandshakes = newReplayCache(cfg.ReplayCheckLen)
 			currentProxyLinks = printTGInfo(cfg)
-			fmt.Fprintln(os.Stderr, "Config reloaded")
+			logf("Config reloaded\n")
 		}
 	}()
 
-	// 等待退出
 	sigCh := make(chan os.Signal, 1)
 	signal.Notify(sigCh, syscall.SIGINT, syscall.SIGTERM)
 	<-sigCh
 
-	fmt.Fprintln(os.Stderr, "Shutting down...")
+	logf("Shutting down...\n")
 	for _, ln := range listeners {
 		ln.Close()
 	}
