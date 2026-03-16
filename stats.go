@@ -1,7 +1,6 @@
 package main
 
 import (
-	"fmt"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -71,11 +70,11 @@ func (ss *SecretStat) AddMsgsToClt(n int64)     { atomic.AddInt64(&ss.MsgsToClt,
 func statsPrinter(cfg *Config) {
 	for {
 		time.Sleep(time.Duration(cfg.StatsPrintPeriod) * time.Second)
-		fmt.Println("Stats for", time.Now().Format("02.01.2006 15:04:05"))
+		logf("Stats for", time.Now().Format("02.01.2006 15:04:05" + "\n"))
 		globalStats.mu.RLock()
 		for secretHex, st := range globalStats.SecretStats {
 			total := atomic.LoadInt64(&st.OctetsFromClt) + atomic.LoadInt64(&st.OctetsToClt)
-			fmt.Printf("%s: %d connects (%d current), %.2f MB, %d msgs\n",
+			logf("%s: %d connects (%d current), %.2f MB, %d msgs\n",
 				secretHex[:8]+"...",
 				atomic.LoadInt64(&st.Connects),
 				atomic.LoadInt64(&st.CurrConnects),
@@ -84,6 +83,6 @@ func statsPrinter(cfg *Config) {
 			)
 		}
 		globalStats.mu.RUnlock()
-		fmt.Println()
+		logf("\n")
 	}
 }
