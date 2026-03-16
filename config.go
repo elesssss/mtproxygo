@@ -268,7 +268,7 @@ func parseArgs() (configPath string) {
 		fmt.Fprintf(os.Stderr, "Usage: %s [options]\n\n", filepath.Base(os.Args[0]))
 		fmt.Fprintf(os.Stderr, "Options:\n")
 		fmt.Fprintf(os.Stderr, "  -s, --secret        生成随机 32 位 hex 密钥\n")
-		fmt.Fprintf(os.Stderr, "  -c, --config PATH   指定配置文件路径 (默认: <程序目录>/config.ini)\n")
+		fmt.Fprintf(os.Stderr, "  -c, --config        指定配置文件路径 (默认: <程序目录>/config.ini)\n")
 		fmt.Fprintf(os.Stderr, "  -h, --help          显示帮助信息\n")
 	}
 
