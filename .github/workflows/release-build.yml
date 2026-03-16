@@ -4,9 +4,9 @@ on:
   workflow_dispatch:
     inputs:
       version:
-        description: 'Version number'
+        description: 'Version number (e.g. v1.0.0)'
         required: true
-        default: 'latest'
+        default: 'v1.0.0'
 
 permissions:
   contents: write
@@ -29,21 +29,19 @@ jobs:
           - { arch: s390x,  goarch: s390x, goarm: '' }
 
     steps:
-      - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
+      - name: Checkout
+        uses: actions/checkout@v4
 
-      - uses: actions/setup-go@v5
+      - name: Set up Go
+        uses: actions/setup-go@v5
         with:
-          go-version: '1.26'
+          go-version-file: go.mod
 
       - name: Set version
         id: set_version
         run: |
           VERSION="${{ github.event.inputs.version }}"
-          echo "VERSION=${VERSION}" >> $GITHUB_ENV
           echo "version=${VERSION}" >> $GITHUB_OUTPUT
-          git tag "${VERSION}" 2>/dev/null || true
 
       - name: Build
         env:
@@ -52,29 +50,41 @@ jobs:
           GOARM: ${{ matrix.goarm }}
           CGO_ENABLED: 0
         run: |
-          REPO="${{ github.event.repository.name }}"
-          go build -trimpath -ldflags="-s -w -buildid=" -o "${REPO}" .
-          tar -czf "${REPO}-linux-${{ matrix.arch }}.tar.gz" "${REPO}" mtproxygo.service mtproxygo_openrc
-          echo "ARCHIVE=${REPO}-linux-${{ matrix.arch }}.tar.gz" >> $GITHUB_ENV
+          go build \
+            -trimpath \
+            -ldflags "-s -w -buildid=" \
+            -o mtproxygo .
 
-      - uses: actions/upload-artifact@v4
+          tar -czf "mtproxygo-linux-${{ matrix.arch }}.tar.gz" \
+            mtproxygo \
+            mtproxygo.service \
+            mtproxygo_openrc
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
         with:
           name: build-linux-${{ matrix.arch }}
-          path: ${{ env.ARCHIVE }}
+          path: mtproxygo-linux-${{ matrix.arch }}.tar.gz
           retention-days: 1
 
   release:
+    name: Create Release
     needs: build
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/download-artifact@v4
+      - name: Download artifacts
+        uses: actions/download-artifact@v4
         with:
           path: dist
           merge-multiple: true
 
-      - run: cd dist && sha256sum *.tar.gz > SHA256SUMS.txt
+      - name: Generate checksums
+        run: |
+          cd dist
+          sha256sum *.tar.gz > SHA256SUMS.txt
 
-      - uses: softprops/action-gh-release@v2
+      - name: Create Release
+        uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ needs.build.outputs.version }}
           name: Release ${{ needs.build.outputs.version }}
