@@ -417,12 +417,13 @@ func (r *mtprotoSecureReader) Read(bufSize int) ([]byte, map[string]bool, error)
 	if err != nil {
 		return nil, nil, err
 	}
-	msgLen := int(binary.LittleEndian.Uint32(hdr))
+	raw := binary.LittleEndian.Uint32(hdr)
 	extra := map[string]bool{}
-	if msgLen > 0x80000000 {
+	if raw > 0x80000000 {
 		extra["QUICKACK_FLAG"] = true
-		msgLen -= 0x80000000
+		raw -= 0x80000000
 	}
+	msgLen := int(raw)
 	data, err := r.upstream.ReadExactly(msgLen)
 	if err != nil {
 		return nil, nil, err
