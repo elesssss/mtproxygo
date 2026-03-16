@@ -53,12 +53,12 @@ jobs:
           go build \
             -trimpath \
             -ldflags "-s -w -buildid=" \
-            -o mtproxygo .
+            -o mtpgo .
 
           tar -czf "mtproxygo-linux-${{ matrix.arch }}.tar.gz" \
-            mtproxygo \
-            mtproxygo.service \
-            mtproxygo_openrc \
+            mtpgo \
+            mtpgo.service \
+            mtpgo_openrc \
             config.ini
 
       - name: Upload artifact
