@@ -61,4 +61,4 @@ var proxySecretHex = "c4f9faca9678e6bb48ad6c7e2ce5c0d24430645d554addeb55419e034d
 
 var ProxySecret, _ = hex.DecodeString(proxySecretHex)
 
-var StatDurationBuckets = []float64{0.1, 0.5, 1, 2, 5, 15, 60, 300, 600, 1800, 1<<31 - 1}
+var StatDurationBuckets = []float64{0.1, 0.5, 1, 2, 5, 15, 60, 300, 600, 1800, 1e9}
