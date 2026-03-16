@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"io"
 	"net/http"
-	"os"
 	"regexp"
 	"strconv"
 	"strings"
@@ -55,7 +54,7 @@ func updateMiddleProxyInfo(cfg *Config) {
 		// 更新 IPv4 代理列表
 		v4, err := getNewProxies(proxyInfoAddr)
 		if err != nil || len(v4) == 0 {
-			fmt.Fprintln(os.Stderr, "Error updating middle proxy list:", err)
+			logf("Error updating middle proxy list:", err)
 		} else {
 			middleProxyMu.Lock()
 			TGMiddleProxiesV4 = v4
@@ -65,7 +64,7 @@ func updateMiddleProxyInfo(cfg *Config) {
 		// 更新 IPv6 代理列表
 		v6, err := getNewProxies(proxyInfoAddrV6)
 		if err != nil || len(v6) == 0 {
-			fmt.Fprintln(os.Stderr, "Error updating middle proxy list (IPv6):", err)
+			logf("Error updating middle proxy list (IPv6):", err)
 		} else {
 			middleProxyMu.Lock()
 			TGMiddleProxiesV6 = v6
@@ -76,7 +75,7 @@ func updateMiddleProxyInfo(cfg *Config) {
 		client := &http.Client{Timeout: 10 * time.Second}
 		resp, err := client.Get(proxySecretAddr)
 		if err != nil {
-			fmt.Fprintln(os.Stderr, "Error updating middle proxy secret:", err)
+			logf("Error updating middle proxy secret:", err)
 		} else {
 			secret, _ := io.ReadAll(resp.Body)
 			resp.Body.Close()
@@ -85,7 +84,7 @@ func updateMiddleProxyInfo(cfg *Config) {
 				copy(newSecret, secret)
 				if string(newSecret) != string(ProxySecret) {
 					ProxySecret = newSecret
-					fmt.Fprintln(os.Stderr, "Middle proxy secret updated")
+					logf("Middle proxy secret updated\n")
 				}
 			}
 		}
@@ -112,7 +111,7 @@ func getSrvTime(cfg *Config) {
 			client := &http.Client{Timeout: 10 * time.Second}
 			resp, err := client.Get(timeSyncAddr)
 			if err != nil {
-				fmt.Fprintln(os.Stderr, "Error getting server time:", err)
+				logf("Error getting server time:", err)
 				return
 			}
 			defer resp.Body.Close()
@@ -124,7 +123,7 @@ func getSrvTime(cfg *Config) {
 
 			srvTime, err := time.Parse(time.RFC1123, dateHeader)
 			if err != nil {
-				fmt.Fprintln(os.Stderr, "Error parsing server time:", err)
+				logf("Error parsing server time:", err)
 				return
 			}
 
@@ -136,13 +135,13 @@ func getSrvTime(cfg *Config) {
 			timeSkewMu.Unlock()
 
 			if skewed && cfg.UseMiddleProxy && !disableMiddleProxy {
-				fmt.Fprintln(os.Stderr, "Time skew detected, please set the clock")
-				fmt.Fprintf(os.Stderr, "Server time: %v, your time: %v\n", srvTime, time.Now().UTC())
-				fmt.Fprintln(os.Stderr, "Disabling advertising to continue serving")
+				logf("Time skew detected, please set the clock\n")
+				logf("Server time: %v, your time: %v\n", srvTime, time.Now().UTC())
+				logf("Disabling advertising to continue serving\n")
 				disableMiddleProxy = true
 				wantReenable = true
 			} else if !skewed && wantReenable {
-				fmt.Fprintln(os.Stderr, "Time is ok, reenabling advertising")
+				logf("Time is ok, reenabling advertising\n")
 				disableMiddleProxy = false
 				wantReenable = false
 			}
@@ -178,7 +177,7 @@ func getMaskHostCertLen(cfg *Config) {
 				},
 			)
 			if err != nil {
-				fmt.Fprintf(os.Stderr, "Failed to connect to MASK_HOST %s: %v\n", cfg.MaskHost, err)
+				logf("Failed to connect to MASK_HOST %s: %v\n", cfg.MaskHost, err)
 				return
 			}
 			defer conn.Close()
@@ -186,19 +185,19 @@ func getMaskHostCertLen(cfg *Config) {
 			// 获取证书原始数据长度
 			state := conn.ConnectionState()
 			if len(state.PeerCertificates) == 0 {
-				fmt.Fprintf(os.Stderr, "MASK_HOST %s returned no certificates\n", cfg.MaskHost)
+				logf("MASK_HOST %s returned no certificates\n", cfg.MaskHost)
 				return
 			}
 			certLen := len(state.PeerCertificates[0].Raw)
 			if certLen < MinCertLen {
-				fmt.Fprintf(os.Stderr, "MASK_HOST %s cert too short: %d\n", cfg.MaskHost, certLen)
+				logf("MASK_HOST %s cert too short: %d\n", cfg.MaskHost, certLen)
 				return
 			}
 
 			fakeCertMu.Lock()
 			if certLen != fakeCertLen {
 				fakeCertLen = certLen
-				fmt.Fprintf(os.Stderr, "Got cert from MASK_HOST %s, length: %d\n", cfg.MaskHost, certLen)
+				logf("Got cert from MASK_HOST %s, length: %d\n", cfg.MaskHost, certLen)
 			}
 			fakeCertMu.Unlock()
 		}()
