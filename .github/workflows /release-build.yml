@@ -1,8 +1,6 @@
-name: Release
+name: Build and Release
 
 on:
-  release:
-    types: [published]
   workflow_dispatch:
     inputs:
       version:
@@ -12,60 +10,104 @@ on:
 
 permissions:
   contents: write
-
+ 
 jobs:
   build:
+    name: Build (${{ matrix.arch }})
     runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        include:
+          - arch: amd64
+            goarch: amd64
+            goarm: ''
+          - arch: arm64
+            goarch: arm64
+            goarm: ''
+          - arch: armv7
+            goarch: arm
+            goarm: '7'
+          - arch: armv6
+            goarch: arm
+            goarm: '6'
+          - arch: armv5
+            goarch: arm
+            goarm: '5'
+          - arch: 386
+            goarch: '386'
+            goarm: ''
+          - arch: s390x
+            goarch: s390x
+            goarm: ''
+ 
     steps:
       - name: Checkout
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
-
-      - name: Setup Go
+ 
+      - name: Set up Go
         uses: actions/setup-go@v5
         with:
-          go-version: '1.26'
-
-      - name: Cache go module
-        uses: actions/cache@v3
-        with:
-          path: |
-            ~/.cache/go-build
-            ~/go/pkg/mod
-          key: ${{ runner.os }}-go-${{ hashFiles('**/go.sum') }}
-          restore-keys: |
-            ${{ runner.os }}-go-
-
+          go-version: '1.21'
+ 
       - name: Set version
         run: |
-          # 手动触发时使用输入的版本号，否则使用 tag
           if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
             VERSION="${{ github.event.inputs.version }}"
           else
             VERSION="${{ github.ref_name }}"
           fi
           echo "VERSION=${VERSION}" >> $GITHUB_ENV
-          # 创建临时 tag 让 git describe 能返回正确版本号
           git tag "${VERSION}" 2>/dev/null || true
-
-      - name: Install zip
-        run: sudo apt-get install -y zip
-
-      - name: Patch Makefile to include .service files
-        run: |
-          sed -i 's|@zip -du $(BUILD_DIR)/$(NAME)-$<-$(VERSION).zip \*.ini|@zip -du $(BUILD_DIR)/$(NAME)-$<-$(VERSION).zip *.ini *.service|' Makefile
-
+ 
       - name: Build
-        run: make release -j$(nproc)
-
+        env:
+          GOOS: linux
+          GOARCH: ${{ matrix.goarch }}
+          GOARM: ${{ matrix.goarm }}
+          CGO_ENABLED: 0
+        run: |
+          REPO_NAME="${{ github.event.repository.name }}"
+          ARCHIVE="${REPO_NAME}-linux-${{ matrix.arch }}.tar.gz"
+ 
+          go build \
+            -trimpath \
+            -ldflags="-s -w -buildid=" \
+            -o "${REPO_NAME}" .
+ 
+          tar -czf "${ARCHIVE}" \
+            "${REPO_NAME}" \
+            mtproxygo.service \
+            mtproxygo_openrc
+ 
+          echo "ARCHIVE=${ARCHIVE}" >> $GITHUB_ENV
+ 
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-linux-${{ matrix.arch }}
+          path: ${{ env.ARCHIVE }}
+          retention-days: 1
+ 
+  release:
+    name: Create Release
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
+ 
       - name: Generate checksums
         run: |
-          cd build
-          sha256sum *.zip > SHA256SUMS.txt
+          cd dist
+          sha256sum *.tar.gz > SHA256SUMS.txt
           cat SHA256SUMS.txt
-
-      - name: Upload Release
+ 
+      - name: Create Release
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ env.VERSION }}
@@ -74,5 +116,5 @@ jobs:
           prerelease: false
           generate_release_notes: true
           files: |
-            build/*.zip
-            build/SHA256SUMS.txt
+            dist/*.tar.gz
+            dist/SHA256SUMS.txt
