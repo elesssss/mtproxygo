@@ -55,18 +55,38 @@ func getIPFromURL(url string) string {
 	if err != nil {
 		return ""
 	}
-	return strings.TrimSpace(string(body))
+	result := strings.TrimSpace(string(body))
+	// 验证是合法 IP，防止防火墙返回 HTML 页面
+	if net.ParseIP(result) == nil {
+		return ""
+	}
+	return result
+}
+
+func getFirstIP(urls []string) string {
+	for _, url := range urls {
+		if ip := getIPFromURL(url); ip != "" {
+			return ip
+		}
+	}
+	return ""
 }
 
 func initIPInfo(cfg *Config) {
-	ipv4 := getIPFromURL("http://v4.ident.me/")
-	if ipv4 == "" {
-		ipv4 = getIPFromURL("http://ipv4.icanhazip.com/")
-	}
-	ipv6 := getIPFromURL("http://v6.ident.me/")
-	if ipv6 == "" {
-		ipv6 = getIPFromURL("http://ipv6.icanhazip.com/")
-	}
+	ipv4 := getFirstIP([]string{
+		"https://ip.gs",
+		"https://api.ipify.org",
+		"https://ip.sb",
+		"https://ifconfig.me",
+		"https://icanhazip.com",
+		"http://v4.ident.me/",
+		"http://ipv4.icanhazip.com/",
+	})
+	ipv6 := getFirstIP([]string{
+		"https://api64.ipify.org",
+		"http://v6.ident.me/",
+		"http://ipv6.icanhazip.com/",
+	})
 	if ipv6 != "" && !strings.Contains(ipv6, ":") {
 		ipv6 = ""
 	}
